@@ -1,3 +1,30 @@
+# Qwen3-TTS (kaji19791201 Fork)
+
+> [!NOTE]
+> This is a personal fork for local environment optimization on **Apple Silicon Mac**.
+> For the original README, see the [Original Contents](#original-contents) below.
+
+## 🚀 Quick Start (Apple Silicon Mac)
+
+### Launch Custom UI
+Apple Silicon Mac (MPS) 用の最適化設定でカスタムGUIを起動するコマンド：
+
+```fish
+source .venv/bin/activate.fish
+python custom_gui.py --dtype float16 --no-flash-attn --ssl-certfile cert.pem --ssl-keyfile key.pem --port 8000
+```
+
+### Environment Details
+- **Architecture**: Apple Silicon (MPS)
+- **Dtype**: `float16`
+- **Environment**: .venv (Local)
+- **Git Identity**: `kaji19791201` (Isolated via hobby HOME config)
+- **Data Path**: Models and Voices are stored in `data/`
+
+---
+
+<div id="original-contents"></div>
+
 # Qwen3-TTS
 
 <br>
