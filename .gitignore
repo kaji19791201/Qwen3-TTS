@@ -20,5 +20,19 @@ wheels/
 *.egg
 .idea/
 .vscode/
+
+# Environments
 venv/
+.venv/
 env/
+
+# Qwen3-TTS Data (Models & Voices)
+data/checkpoints/
+data/voices/
+
+# Local artifacts & Secrets
+.agent/
+.gradio/
+*.pem
+*.wav
+*.mp3
