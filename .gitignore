@@ -29,6 +29,7 @@ env/
 # Qwen3-TTS Data (Models & Voices)
 data/checkpoints/
 data/voices/
+!data/voices/*.pt
 
 # Local artifacts & Secrets
 .agent/

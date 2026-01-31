@@ -471,6 +471,7 @@ class Qwen3TTSModel:
         self,
         text: Union[str, List[str]],
         language: Union[str, List[str]] = None,
+        instruct: Optional[Union[str, List[str]]] = None,
         ref_audio: Optional[Union[AudioLike, List[AudioLike]]] = None,
         ref_text: Optional[Union[str, List[Optional[str]]]] = None,
         x_vector_only_mode: Union[bool, List[bool]] = False,
@@ -588,6 +589,17 @@ class Qwen3TTSModel:
         input_texts = [self._build_assistant_text(t) for t in texts]
         input_ids = self._tokenize_texts(input_texts)
 
+        instructs = self._ensure_list(instruct) if instruct is not None else [None] * len(texts)
+        if len(instructs) == 1 and len(texts) > 1:
+            instructs = instructs * len(texts)
+        
+        instruct_ids: List[Optional[torch.Tensor]] = []
+        for ins in instructs:
+            if ins is None or ins == "":
+                instruct_ids.append(None)
+            else:
+                instruct_ids.append(self._tokenize_texts([self._build_instruct_text(ins)])[0])
+
         ref_ids = None
         if ref_texts_for_ids is not None:
             ref_ids = []
@@ -602,6 +614,7 @@ class Qwen3TTSModel:
 
         talker_codes_list, _ = self.model.generate(
             input_ids=input_ids,
+            instruct_ids=instruct_ids,
             ref_ids=ref_ids,
             voice_clone_prompt=voice_clone_prompt_dict,
             languages=languages,
