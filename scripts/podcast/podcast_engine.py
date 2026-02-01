@@ -18,75 +18,47 @@ class PodcastEngine:
         self.voices_dir = voices_dir
         self.voice_cache = {}
 
-    def chunk_text(self, text: str, max_chars: int = 150) -> List[NarrationChunk]:
+    def chunk_text(self, text: str, max_chars: int = 500) -> List[NarrationChunk]:
         """
-        Splits long text into smaller chunks.
-        Extracts inline instructions like "(Instruction: whisper)" or "[Instruction: happy]".
-        Skips metadata headers and handles standalone instructions.
+        Splits long text into smaller chunks for processing.
+        Skips metadata headers. Ideally keeps larger blocks for better TTS flow.
         """
-        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        lines = [line.strip() for line in text.splitlines()]
         chunks = []
         
-        # Regex to find instructions
-        instr_pattern = re.compile(r'[\(\[]Instruction:\s*([^\)\]]+)[\)\]]', re.IGNORECASE)
         # Metadata pattern
         meta_pattern = re.compile(r'^(\[File|Date:|Location:)', re.IGNORECASE)
 
-        pending_instruction = None
+        current_block = ""
 
         for line in lines:
             # Skip metadata lines
             if meta_pattern.search(line):
                 continue
-
-            # Extract instruction if present
-            current_instruction = None
-            match = instr_pattern.search(line)
-            if match:
-                current_instruction = match.group(1).strip()
-                # Remove the instruction tag from the text
-                line = instr_pattern.sub('', line).strip()
-
-            # If it's a standalone instruction (no text)
+            
+            # If empty line, it might be a paragraph break. 
+            # If current block is long enough, push it.
             if not line:
-                if current_instruction:
-                    # Check for explicit pause instruction (e.g., "pause 2s" or "2秒休止")
-                    pause_match = re.search(r'pause\s*([\d\.]+)\s*s', current_instruction, re.I)
-                    if pause_match:
-                        chunks.append(NarrationChunk(text="", pause_duration=float(pause_match.group(1))))
-                    else:
-                        # For other standalone instructions (like "takes a deep breath")
-                        # We might want a longer pause even if no text is generated
-                        chunks.append(NarrationChunk(text="", instruction=current_instruction, pause_duration=1.2))
-                        pending_instruction = current_instruction
+                if current_block:
+                    chunks.append(NarrationChunk(text=current_block.strip()))
+                    current_block = ""
                 continue
 
-            # Combine with pending instruction if any
-            final_instruction = current_instruction or pending_instruction
-            pending_instruction = None # Reset after applying
+            # Add line to current block
+            if current_block:
+                current_block += "\n" + line
+            else:
+                current_block = line
 
-            # If line is short enough, keep it
-            if len(line) <= max_chars:
-                chunks.append(NarrationChunk(text=line, instruction=final_instruction))
-                continue
-            
-            # Sub-split by sentence ending punctuation
-            sub_lines = re.split(r'(?<=[。！？.!?.])', line)
-            current_text = ""
-            
-            for sub in sub_lines:
-                sub = sub.strip()
-                if not sub: continue
-                
-                if len(current_text) + len(sub) <= max_chars:
-                    current_text += sub
-                else:
-                    if current_text:
-                        chunks.append(NarrationChunk(text=current_text, instruction=final_instruction))
-                    current_text = sub
-            
-            if current_text:
-                chunks.append(NarrationChunk(text=current_text, instruction=final_instruction))
+            # If block gets too long, force split (roughly)
+            # This is a fallback; ideally we split on newlines (paragraphs)
+            if len(current_block) > max_chars:
+                chunks.append(NarrationChunk(text=current_block.strip()))
+                current_block = ""
+        
+        # Remaining text
+        if current_block:
+             chunks.append(NarrationChunk(text=current_block.strip()))
                 
         return chunks
 
@@ -147,7 +119,6 @@ class PodcastEngine:
                 wavs, sr = self.tts.generate_voice_clone(
                     text=chunk.text,
                     language=language,
-                    instruct=chunk.instruction,
                     voice_clone_prompt=voice_prompt
                 )
                 
@@ -156,11 +127,10 @@ class PodcastEngine:
                 
                 all_wavs.append(wavs[0])
             
-            # Add pause after this chunk (or as its only content)
-            actual_pause = chunk.pause_duration if chunk.pause_duration is not None else pause_duration
-            if actual_pause > 0:
+            # Add default pause between chunks
+            if pause_duration > 0:
                 if sampling_rate is None: sampling_rate = 24000 # Fallback
-                silence = np.zeros(int(sampling_rate * actual_pause), dtype=np.float32)
+                silence = np.zeros(int(sampling_rate * pause_duration), dtype=np.float32)
                 all_wavs.append(silence)
 
         if not all_wavs:
