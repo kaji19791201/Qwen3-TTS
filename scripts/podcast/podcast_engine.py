@@ -2,6 +2,7 @@ import os
 import torch
 import numpy as np
 import re
+import scipy.io.wavfile as wavfile
 from typing import List, Dict, Tuple, Optional
 from dataclasses import dataclass
 from qwen_tts import Qwen3TTSModel, VoiceClonePromptItem
@@ -102,10 +103,11 @@ class PodcastEngine:
         script_text: str, 
         voice_profile: str, 
         language: str = "Japanese",
-        pause_duration: float = 0.6
+        pause_duration: float = 0.6,
+        cache_dir: Optional[str] = None
     ) -> Tuple[np.ndarray, int]:
         """
-        Generates a solo podcast from script text.
+        Generates a solo podcast from script text with optional caching.
         """
         chunks = self.chunk_text(script_text)
         voice_prompt = self.load_voice_profile(voice_profile)
@@ -113,23 +115,47 @@ class PodcastEngine:
         all_wavs = []
         sampling_rate = None
 
+        if cache_dir:
+            os.makedirs(cache_dir, exist_ok=True)
+
+        import hashlib
+
         for i, chunk in enumerate(chunks):
-            if chunk.text:
+            if not chunk.text:
+                continue
+                
+            # Create a hash for the chunk text to detect changes
+            chunk_hash = hashlib.md5(f"{voice_profile}_{chunk.text}".encode()).hexdigest()
+            cache_file = os.path.join(cache_dir, f"chunk_{i:03d}_{chunk_hash}.wav") if cache_dir else None
+            
+            wav_data = None
+            sr = None
+
+            if cache_file and os.path.exists(cache_file):
+                print(f"Using cached chunk {i+1}/{len(chunks)}...")
+                sr, wav_data = wavfile.read(cache_file)
+                # Convert back to float32
+                wav_data = wav_data.astype(np.float32) / 32767.0
+            else:
                 print(f"Generating chunk {i+1}/{len(chunks)}: {chunk.text[:30]}...")
-                wavs, sr = self.tts.generate_voice_clone(
+                wavs, sr_gen = self.tts.generate_voice_clone(
                     text=chunk.text,
                     language=language,
                     voice_clone_prompt=voice_prompt
                 )
+                wav_data = wavs[0]
+                sr = sr_gen
                 
-                if sampling_rate is None:
-                    sampling_rate = sr
-                
-                all_wavs.append(wavs[0])
+                if cache_file:
+                    wavfile.write(cache_file, sr, (wav_data * 32767).astype(np.int16))
+            
+            if sampling_rate is None:
+                sampling_rate = sr
+            
+            all_wavs.append(wav_data)
             
             # Add default pause between chunks
-            if pause_duration > 0:
-                if sampling_rate is None: sampling_rate = 24000 # Fallback
+            if pause_duration > 0 and i < len(chunks) - 1:
                 silence = np.zeros(int(sampling_rate * pause_duration), dtype=np.float32)
                 all_wavs.append(silence)
 

@@ -49,12 +49,17 @@ def main():
     # Initialize Engine
     engine = PodcastEngine(tts, voices_dir=VOICES_DIR)
 
+    # Cache directory based on script name
+    script_base = os.path.splitext(os.path.basename(args.script_path))[0]
+    cache_dir = os.path.join(PROJECT_ROOT, "data/cache", script_base)
+
     # Generate Podcast
-    print(f"Generating podcast for voice: {args.voice}...")
+    print(f"Generating podcast for voice: {args.voice} (Incremental: ON)...")
     wav, sr = engine.generate_solo_podcast(
         script_text=script_text,
         voice_profile=args.voice,
-        language=args.language
+        language=args.language,
+        cache_dir=cache_dir
     )
 
     # Save Output
